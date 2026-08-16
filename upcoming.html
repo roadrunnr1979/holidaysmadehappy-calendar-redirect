@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upcoming Craft Fairs</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    background: #fafafa;
+    color: #222;
+  }
+  h1 {
+    font-size: 1.4em;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: #777;
+    font-size: 0.9em;
+    margin-bottom: 24px;
+  }
+  .event {
+    background: white;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .event-date {
+    font-weight: 600;
+    color: #b5473b;
+    font-size: 0.95em;
+  }
+  .event-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 4px 0;
+  }
+  .event-location {
+    color: #555;
+    font-size: 0.9em;
+  }
+  .event-desc {
+    color: #666;
+    font-size: 0.9em;
+    margin-top: 6px;
+  }
+  .empty, .error {
+    color: #888;
+    text-align: center;
+    padding: 40px 0;
+  }
+  .error { color: #b5473b; }
+</style>
+</head>
+<body>
+  <h1>Upcoming Craft Fairs</h1>
+  <div class="subtitle">Where to find Sam next</div>
+  <div id="events">
+    <div class="empty">Loading…</div>
+  </div>
+
+<script>
+const ICS_URL = "https://p128-caldav.icloud.com/published/2/MTA1NzA1OTI0MTA1NzA1OYTeWAfFJynuP-K5_aiDPwQQg64T2mPF-DJSK-q8euY4NezAhAUl3oM2RNaFLdUntKQKAW3djfvT73MZ7nzUxsA";
+
+function parseICSDate(str) {
+  // Handles YYYYMMDD or YYYYMMDDTHHMMSS(Z)
+  str = str.trim();
+  const y = str.slice(0,4), mo = str.slice(4,6), d = str.slice(6,8);
+  if (str.length <= 8) return new Date(`${y}-${mo}-${d}T00:00:00`);
+  const h = str.slice(9,11), mi = str.slice(11,13), s = str.slice(13,15);
+  const iso = `${y}-${mo}-${d}T${h}:${mi}:${s}${str.endsWith('Z') ? 'Z' : ''}`;
+  return new Date(iso);
+}
+
+function unfoldICS(text) {
+  // ICS lines can be folded with CRLF + space/tab continuation
+  return text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '');
+}
+
+function parseEvents(icsText) {
+  const text = unfoldICS(icsText);
+  const blocks = text.split('BEGIN:VEVENT').slice(1);
+  const events = [];
+
+  blocks.forEach(block => {
+    const chunk = block.split('END:VEVENT')[0];
+    const get = (key) => {
+      const re = new RegExp('^' + key + '(?:;[^:]*)?:(.*)$', 'm');
+      const match = chunk.match(re);
+      return match ? match[1].trim() : null;
+    };
+
+    const summary = get('SUMMARY');
+    const dtstart = get('DTSTART');
+    const location = get('LOCATION');
+    const description = get('DESCRIPTION');
+
+    if (summary && dtstart) {
+      events.push({
+        title: summary.replace(/\\,/g, ',').replace(/\\n/g, ' '),
+        date: parseICSDate(dtstart),
+        location: location ? location.replace(/\\,/g, ',') : null,
+        description: description ? description.replace(/\\,/g, ',').replace(/\\n/g, ' ') : null
+      });
+    }
+  });
+
+  return events;
+}
+
+function render(events) {
+  const container = document.getElementById('events');
+  const now = new Date();
+  now.setHours(0,0,0,0);
+
+  const upcoming = events
+    .filter(e => e.date >= now)
+    .sort((a, b) => a.date - b.date);
+
+  if (upcoming.length === 0) {
+    container.innerHTML = '<div class="empty">No upcoming events right now — check back soon!</div>';
+    return;
+  }
+
+  const dateFmt = { weekday: 'long', month: 'long', day: 'numeric' };
+
+  container.innerHTML = upcoming.map(e => `
+    <div class="event">
+      <div class="event-date">${e.date.toLocaleDateString('en-US', dateFmt)}</div>
+      <div class="event-title">${e.title}</div>
+      ${e.location ? `<div class="event-location">📍 ${e.location}</div>` : ''}
+      ${e.description ? `<div class="event-desc">${e.description}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+fetch(ICS_URL)
+  .then(res => {
+    if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+    return res.text();
+  })
+  .then(text => render(parseEvents(text)))
+  .catch(err => {
+    document.getElementById('events').innerHTML =
+      `<div class="error">Couldn't load events (${err.message}). This calendar host may be blocking direct browser access — let us know if this keeps happening.</div>`;
+    console.error(err);
+  });
+</script>
+</body>
+</html>
+a 
