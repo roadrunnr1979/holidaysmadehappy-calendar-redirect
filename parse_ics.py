@@ -33,6 +33,10 @@ def parse_events(ics_text):
         dtstart = get('DTSTART')
         location = get('LOCATION')
         description = get('DESCRIPTION')
+        exdate = get('EXDATE')
+
+        if exdate and dtstart and exdate.strip()[:8] == dtstart.strip()[:8]:
+            continue
 
         if summary and dtstart:
             events.append({
